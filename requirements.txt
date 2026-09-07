@@ -1,0 +1,7 @@
+# Cubii CV-QC prototype — core dependencies
+# anomalib 2.6.0 ships its own pinned torch/lightning; we let pip resolve those
+# transitively rather than hard-pinning them ourselves.
+anomalib[core]==2.6.0
+opencv-python-headless
+pillow
+matplotlib

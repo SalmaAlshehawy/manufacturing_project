@@ -1,0 +1,33 @@
+# PatchCore configuration for the MVTec AD "bottle" category prototype.
+#
+# See README.md for background. Key idea: PatchCore trains only on the
+# "good" (defect-free) images in data/<root>/<category>/train/good — nothing
+# else — and evaluates against data/<root>/<category>/test/*.
+
+seed: 42
+
+data:
+  root: data/MVTec
+  category: bottle
+  train_batch_size: 32
+  eval_batch_size: 32
+  num_workers: 4
+
+model:
+  # ImageNet-pretrained CNN used as a fixed feature extractor (no fine-tuning).
+  backbone: wide_resnet50_2
+  # Which backbone stages to pull features from. Mid-level layers (layer2,
+  # layer3) capture texture/local-defect-scale patterns better than very
+  # early (too generic) or very late (too global) layers.
+  layers: [layer2, layer3]
+  pre_trained: true
+  # Fraction of training patch features kept in the memory bank after
+  # coreset subsampling. Lower = faster/smaller memory bank, higher = more
+  # thorough but slower. 0.1 (10%) is the PatchCore paper's default.
+  coreset_sampling_ratio: 0.1
+  # Number of nearest neighbors used when scoring a test patch against the
+  # memory bank.
+  num_neighbors: 9
+
+trainer:
+  default_root_dir: results
