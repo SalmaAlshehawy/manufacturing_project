@@ -10,10 +10,15 @@ looks physically wrong with the **container itself** — dents, cracks, broken
 seals, contamination, label defects — not the liquid inside.
 
 We don't have real factory images yet, so this prototype trains and evaluates
-on the **MVTec AD "bottle"** category as a stand-in: it's a well-known public
-benchmark for exactly this kind of problem (defect-free training images,
-mixed normal/defective test images), which lets us validate the pipeline
-before real Cubii line images are available.
+on the **MVTec LOCO AD "juice_bottle"** category as a stand-in: it's a
+well-known public benchmark for exactly this kind of problem (defect-free
+training images, mixed normal/defective test images) that also happens to be
+a real juice bottle photographed from the side — closer to what a Cubii line
+camera would actually see than MVTec AD's top-down "bottle" category (which
+photographs straight down through the neck, a different but also realistic
+inspection angle). Either way, this lets us validate the pipeline before real
+Cubii line images are available; `configs/patchcore.yaml`'s `data.dataset`
+field switches between the two (`mvtec_loco` or `mvtec_ad`).
 
 ## Why PatchCore / anomaly detection (not classification)
 
@@ -37,8 +42,8 @@ easy to collect in bulk, and "abnormal" can be anything.
 ├── configs/
 │   └── patchcore.yaml       # Model/data/trainer configuration
 ├── data/
-│   └── MVTec/
-│       └── bottle/          # MVTec AD "bottle" category (not committed — see below)
+│   └── MVTec_LOCO/
+│       └── juice_bottle/    # MVTec LOCO AD "juice_bottle" category (not committed — see below)
 ├── src/
 │   ├── train.py             # Train PatchCore using configs/patchcore.yaml + MVTec-style data
 │   ├── train_folder.py      # Train PatchCore on a plain folder of "good" images
@@ -60,23 +65,25 @@ Core dependency: `anomalib==2.6.0` (built on PyTorch + PyTorch Lightning).
 
 ## Dataset
 
-Download the MVTec AD dataset (or just the `bottle` category) from the
-official source and extract it so you end up with:
+Download the MVTec LOCO AD dataset (or just the `juice_bottle` category) from
+the official source and extract it so you end up with:
 
 ```
-data/MVTec/bottle/
+data/MVTec_LOCO/juice_bottle/
 ├── train/
 │   └── good/                # only defect-free images — this is all PatchCore trains on
 ├── test/
 │   ├── good/
-│   ├── broken_large/
-│   ├── broken_small/
-│   └── contamination/
+│   ├── logical_anomalies/   # e.g. wrong fill level, wrong label/fruit combination
+│   └── structural_anomalies/ # e.g. cracks, contamination
 └── ground_truth/
-    ├── broken_large/        # pixel-level defect masks for the defective test images
-    ├── broken_small/
-    └── contamination/
+    ├── logical_anomalies/
+    └── structural_anomalies/
 ```
+
+To use the original MVTec AD "bottle" category instead, set `data.dataset:
+mvtec_ad`, `data.root: data/MVTec`, `data.category: bottle` in
+`configs/patchcore.yaml`.
 
 The dataset is **not committed to git** (see `.gitignore`) — it's a few
 hundred MB and is a public benchmark dataset, not project source code.
@@ -88,11 +95,12 @@ source venv/bin/activate
 python src/train.py
 ```
 
-This reads `configs/patchcore.yaml`, builds the MVTec datamodule pointed at
-`data/MVTec/bottle`, fits PatchCore (this just means: run all "good" training
-images through the backbone once and build the memory bank — there's no
-gradient descent, so this is fast, even on CPU), then evaluates against the
-test set and prints image-level and pixel-level AUROC.
+This reads `configs/patchcore.yaml`, builds the matching anomalib datamodule
+pointed at `data/MVTec_LOCO/juice_bottle`, fits PatchCore (this just means:
+run all "good" training images through the backbone once and build the
+memory bank — there's no gradient descent, so this is fast, even on CPU),
+then evaluates against the test set and prints image-level and pixel-level
+AUROC.
 
 Outputs (checkpoint, threshold, metrics, visualizations) land under `results/`.
 

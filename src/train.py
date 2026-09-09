@@ -1,13 +1,15 @@
-"""Train PatchCore on an MVTec-AD-style dataset (default: the "bottle" category).
+"""Train PatchCore on an MVTec-style dataset (MVTec AD or MVTec LOCO AD).
 
 Usage:
     python src/train.py [--config configs/patchcore.yaml]
 
 What this actually does:
     1. Loads config/data/model hyperparameters from the YAML config.
-    2. Points anomalib's MVTecAD datamodule at data/<root>/<category>, which
-       expects the standard MVTec AD folder layout (train/good, test/<defect
-       types>, ground_truth/<defect types>).
+    2. Points the matching anomalib datamodule at data/<root>/<category>:
+       - "mvtec_ad" expects train/good, test/<defect types>,
+         ground_truth/<defect types> (e.g. the "bottle" category).
+       - "mvtec_loco" expects the MVTec LOCO AD layout (e.g. "juice_bottle"),
+         which anomalib reads natively via the same train/good structure.
     3. Builds a PatchCore model: a frozen, ImageNet-pretrained CNN backbone
        used purely as a feature extractor (no weights are updated).
     4. "Trains" — for PatchCore this means: run every training (good-only)
@@ -31,9 +33,14 @@ from backbone_cache import patch_timm_for_local_weights
 # Must happen before anomalib pulls in timm-backed feature extractors.
 patch_timm_for_local_weights()
 
-from anomalib.data import MVTecAD  # noqa: E402
+from anomalib.data import MVTecAD, MVTecLOCO  # noqa: E402
 from anomalib.engine import Engine  # noqa: E402
 from anomalib.models import Patchcore  # noqa: E402
+
+_DATAMODULES = {
+    "mvtec_ad": MVTecAD,
+    "mvtec_loco": MVTecLOCO,
+}
 
 
 def load_config(path: str) -> dict:
@@ -59,7 +66,14 @@ def main() -> None:
             "layout this script expects."
         )
 
-    datamodule = MVTecAD(
+    dataset_kind = data_cfg.get("dataset", "mvtec_ad")
+    if dataset_kind not in _DATAMODULES:
+        raise SystemExit(
+            f"Unknown data.dataset '{dataset_kind}' in config; "
+            f"expected one of {list(_DATAMODULES)}."
+        )
+
+    datamodule = _DATAMODULES[dataset_kind](
         root=data_cfg["root"],
         category=data_cfg["category"],
         train_batch_size=data_cfg.get("train_batch_size", 32),

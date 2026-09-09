@@ -1,4 +1,6 @@
-# PatchCore configuration for the MVTec AD "bottle" category prototype.
+# PatchCore configuration for the MVTec LOCO AD "juice_bottle" category
+# prototype (closer visually to Cubii's actual liquid-food containers than
+# MVTec AD's top-down "bottle" category).
 #
 # See README.md for background. Key idea: PatchCore trains only on the
 # "good" (defect-free) images in data/<root>/<category>/train/good — nothing
@@ -7,8 +9,10 @@
 seed: 42
 
 data:
-  root: data/MVTec
-  category: bottle
+  # "mvtec_ad" or "mvtec_loco" — picks which anomalib datamodule to use.
+  dataset: mvtec_loco
+  root: data/MVTec_LOCO
+  category: juice_bottle
   train_batch_size: 32
   eval_batch_size: 32
   num_workers: 4
