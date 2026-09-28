@@ -31,6 +31,10 @@ def main() -> None:
                          help="Folder of defect-free ('good') images")
     parser.add_argument("--abnormal-dir", default=None,
                          help="Optional folder of known-defective images, for evaluation")
+    parser.add_argument("--mask-dir", default=None,
+                         help="Optional folder of pixel-level defect masks matching --abnormal-dir filenames")
+    parser.add_argument("--normal-test-dir", default=None,
+                         help="Optional separate folder of held-out normal images for evaluation")
     parser.add_argument("--category", default="cubii",
                          help="A name for this dataset, used to organize results/")
     parser.add_argument("--backbone", default="wide_resnet50_2")
@@ -44,6 +48,8 @@ def main() -> None:
         name=args.category,
         normal_dir=args.normal_dir,
         abnormal_dir=args.abnormal_dir,
+        mask_dir=args.mask_dir,
+        normal_test_dir=args.normal_test_dir,
         train_batch_size=args.batch_size,
         eval_batch_size=args.batch_size,
         num_workers=args.num_workers,
