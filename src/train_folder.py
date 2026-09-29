@@ -38,8 +38,8 @@ def main() -> None:
     parser.add_argument("--category", default="cubii",
                          help="A name for this dataset, used to organize results/")
     parser.add_argument("--backbone", default="wide_resnet50_2")
-    parser.add_argument("--layers", nargs="+", default=["layer2", "layer3"])
-    parser.add_argument("--coreset-sampling-ratio", type=float, default=0.1)
+    parser.add_argument("--layers", nargs="+", default=["layer1", "layer2", "layer3"])
+    parser.add_argument("--coreset-sampling-ratio", type=float, default=0.25)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--num-workers", type=int, default=4)
     args = parser.parse_args()
