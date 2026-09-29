@@ -9,16 +9,18 @@ quality control on the production line: a camera looks at each container
 looks physically wrong with the **container itself** — dents, cracks, broken
 seals, contamination, label defects — not the liquid inside.
 
-We don't have real factory images yet, so this prototype trains and evaluates
-on the **MVTec LOCO AD "juice_bottle"** category as a stand-in: it's a
-well-known public benchmark for exactly this kind of problem (defect-free
-training images, mixed normal/defective test images) that also happens to be
-a real juice bottle photographed from the side — closer to what a Cubii line
-camera would actually see than MVTec AD's top-down "bottle" category (which
-photographs straight down through the neck, a different but also realistic
-inspection angle). Either way, this lets us validate the pipeline before real
-Cubii line images are available; `configs/patchcore.yaml`'s `data.dataset`
-field switches between the two (`mvtec_loco` or `mvtec_ad`).
+We don't have real factory images yet (the planned Cubii factory visit fell
+through), so this prototype trains and evaluates on **PKU-GoodsAD**'s
+`food_box` category (github.com/jianzhang96/GoodsAD) as a stand-in: real
+photos of packaged retail products on store shelves, with labeled physical
+defects — `deformation`, `opened` (not properly sealed — matches the
+"container not closed" defect case), and `surface_damage`. This validates the
+full pipeline (training, evaluation, inference) before real Cubii line images
+are available. Earlier iterations of this prototype used MVTec AD "bottle"
+and MVTec LOCO AD "juice_bottle"; `src/train.py` + `configs/patchcore.yaml`
+still support those (`data.dataset: mvtec_ad` / `mvtec_loco`), but the current
+default dataset/training path is GoodsAD `food_box` via `src/train_folder.py`
+(see below).
 
 ## Why PatchCore / anomaly detection (not classification)
 
@@ -65,44 +67,82 @@ Core dependency: `anomalib==2.6.0` (built on PyTorch + PyTorch Lightning).
 
 ## Dataset
 
-Download the MVTec LOCO AD dataset (or just the `juice_bottle` category) from
-the official source and extract it so you end up with:
+Download PKU-GoodsAD's `food_box` category from
+github.com/jianzhang96/GoodsAD and extract it so you end up with:
 
 ```
-data/MVTec_LOCO/juice_bottle/
+data/GoodsAD/food_box/
 ├── train/
-│   └── good/                # only defect-free images — this is all PatchCore trains on
+│   └── good/                             # 432 defect-free images — this is all PatchCore trains on
 ├── test/
-│   ├── good/
-│   ├── logical_anomalies/   # e.g. wrong fill level, wrong label/fruit combination
-│   └── structural_anomalies/ # e.g. cracks, contamination
+│   ├── good/                             # held-out normal images, for evaluation
+│   ├── deformation/ opened/ surface_damage/   # defective test images, one folder per defect type
 └── ground_truth/
-    ├── logical_anomalies/
-    └── structural_anomalies/
+    └── deformation/ opened/ surface_damage/   # matching pixel-level defect masks (same filenames)
 ```
 
-To use the original MVTec AD "bottle" category instead, set `data.dataset:
-mvtec_ad`, `data.root: data/MVTec`, `data.category: bottle` in
-`configs/patchcore.yaml`.
+anomalib's official MVTec-format loader (`src/train.py`) currently crashes on
+this dataset with a `pandas`/`anomalib` internal bug (`ValueError: Must have
+equal len keys and value when setting with an iterable` inside
+`make_mvtec_ad_dataset`) — confirmed not a data problem (file counts and
+filename pairing verified exactly correct; identical code works when run
+standalone outside the library's own function). Training therefore goes
+through `src/train_folder.py` instead, against a manually flattened copy of
+the three defect-type folders:
 
-The dataset is **not committed to git** (see `.gitignore`) — it's a few
-hundred MB and is a public benchmark dataset, not project source code.
+```
+data/GoodsAD_merged/food_box/
+├── abnormal/   # all defective test images from all 3 types, defect-type-prefixed filenames
+└── masks/      # matching ground-truth masks, same filenames (different extension)
+```
+
+(No images were altered — only reorganized into these two flat folders to
+work around the loader bug above.)
+
+The dataset is **not committed to git** (see `.gitignore`) — it's ~1.7GB and
+is a public benchmark dataset, not project source code.
 
 ## Training
 
 ```bash
 source venv/bin/activate
-python src/train.py
+python src/train_folder.py \
+  --normal-dir data/GoodsAD/food_box/train/good \
+  --abnormal-dir data/GoodsAD_merged/food_box/abnormal \
+  --mask-dir data/GoodsAD_merged/food_box/masks \
+  --normal-test-dir data/GoodsAD/food_box/test/good \
+  --category food_box
 ```
 
-This reads `configs/patchcore.yaml`, builds the matching anomalib datamodule
-pointed at `data/MVTec_LOCO/juice_bottle`, fits PatchCore (this just means:
-run all "good" training images through the backbone once and build the
-memory bank — there's no gradient descent, so this is fast, even on CPU),
-then evaluates against the test set and prints image-level and pixel-level
-AUROC.
+This fits PatchCore (runs every "good" training image through the frozen,
+pretrained `wide_resnet50_2` backbone once and builds a memory bank of
+normal-image patch features — there's no gradient descent, so no GPU is
+required, though it is CPU-slow: ~1.5 hours on this dataset), then evaluates
+against the abnormal + held-out normal test images and prints image-level and
+pixel-level AUROC/F1.
 
-Outputs (checkpoint, threshold, metrics, visualizations) land under `results/`.
+Outputs (checkpoint, metrics, visualizations) land under `results/Patchcore/food_box/`.
+
+### Current result (baseline: `--coreset-sampling-ratio 0.1` [default], `layer2`+`layer3`)
+
+| Metric | Score |
+|---|---|
+| image_AUROC | 0.8027 |
+| image_F1Score | 0.8000 |
+| pixel_AUROC | 0.9746 |
+| pixel_F1Score | 0.3482 |
+
+In plain terms: ~80% accurate at the normal-vs-defective call; ~97% accurate
+at localizing *where* a defect is once flagged. Raising
+`--coreset-sampling-ratio` to 0.25 was tried and did **not** improve results
+(image_AUROC dropped slightly to 0.7825) at ~3x the training time — not
+recommended. Adding `layer1` to the feature layers was also tried and caused
+an out-of-memory crash (much higher-resolution feature maps blow up memory
+during coreset selection) — do not add `layer1` without significantly more
+RAM headroom.
+
+The trained checkpoint for the result above is available as a GitHub Release
+asset (see repo Releases) rather than committed to git, since it's ~355MB.
 
 ## Inference on a single image
 
@@ -112,12 +152,14 @@ python src/infer.py --image path/to/some_test_image.png
 ```
 
 Prints the anomaly score and predicted label (normal/anomalous), and saves a
-heatmap visualization showing *where* the model thinks the defect is.
+heatmap visualization showing *where* the model thinks the defect is. Uses
+the most recently modified checkpoint under `results/` unless `--ckpt` is
+given explicitly.
 
 ## Path to real Cubii data
 
 Once real line images are available: collect a folder of defect-free
-container images (`good/`), no defective examples strictly required, and use
-`src/train_folder.py` instead of `src/train.py` — it skips the MVTec-specific
-folder structure (test/ground_truth splits) and trains directly on a plain
-image folder, which is the realistic shape of early production data.
+container images (`good/`), no defective examples strictly required, and
+point `src/train_folder.py` at it the same way as above — it's already the
+active training path and doesn't require the MVTec-specific
+train/test/ground_truth folder structure.
