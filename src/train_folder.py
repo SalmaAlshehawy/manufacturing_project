@@ -23,6 +23,18 @@ patch_timm_for_local_weights()
 from anomalib.data import Folder  # noqa: E402
 from anomalib.engine import Engine  # noqa: E402
 from anomalib.models import Patchcore  # noqa: E402
+from torchvision.transforms import v2  # noqa: E402
+
+
+def build_lighting_augmentation() -> v2.Transform:
+    """Random brightness/contrast jitter for training images only.
+
+    Targets a specific observed failure mode: the model mistaking bright
+    glare/reflections on packaging for real defects. Deliberately excludes
+    rotation/flip/crop — the camera angle is fixed (boxes photographed
+    upright on a shelf), so those wouldn't reflect realistic variation.
+    """
+    return v2.ColorJitter(brightness=0.2, contrast=0.2)
 
 
 def main() -> None:
@@ -42,7 +54,12 @@ def main() -> None:
     parser.add_argument("--coreset-sampling-ratio", type=float, default=0.25)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--num-workers", type=int, default=4)
+    parser.add_argument("--augment", action="store_true",
+                         help="Apply brightness/contrast jitter to training images "
+                              "(targets lighting-glare false positives; off by default)")
     args = parser.parse_args()
+
+    train_augmentations = build_lighting_augmentation() if args.augment else None
 
     datamodule = Folder(
         name=args.category,
@@ -53,6 +70,7 @@ def main() -> None:
         train_batch_size=args.batch_size,
         eval_batch_size=args.batch_size,
         num_workers=args.num_workers,
+        train_augmentations=train_augmentations,
     )
 
     model = Patchcore(
