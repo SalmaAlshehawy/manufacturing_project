@@ -128,6 +128,21 @@ from anomalib.engine import Engine
 from anomalib.models import Patchcore
 from torchvision.transforms import v2
 
+# Kaggle/Colab notebooks can hit a RecursionError from tqdm's progress bar
+# fighting with rich/ipykernel's Jupyter display hooks. We don't need the
+# live bar, just the final metrics, so disable it outright.
+import tqdm as tqdm_module
+
+_original_tqdm_init = tqdm_module.tqdm.__init__
+
+
+def _patched_tqdm_init(self, *args, **kwargs):
+    kwargs["disable"] = True
+    _original_tqdm_init(self, *args, **kwargs)
+
+
+tqdm_module.tqdm.__init__ = _patched_tqdm_init
+
 train_augmentations = v2.ColorJitter(brightness=0.2, contrast=0.2)
 
 datamodule = Folder(
